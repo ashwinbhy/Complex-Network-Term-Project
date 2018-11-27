@@ -1,0 +1,93 @@
+delete from comments where assetURL not in ( select distinct(webURL) from articles )
+
+
+-- region wise 
+select keyword, count(*)  from comments c, articleKeywords a, locationState ls , commenterGender cg where c.assetURL = a.webURL and ls.city = c.userLocation  and c.userID = cg.userID and c.username = cg.username and ls.region = 'North East'  and cg.gender = 'female' and keyword not in (select keyword from comments c, articleKeywords a, locationState ls , commenterGender cg where c.assetURL = a.webURL and ls.city = c.userLocation  and c.userID = cg.userID and c.username = cg.username  and cg.gender = 'female' group by a.keyword order by count(*) desc LIMIT 50) group by a.keyword order by count(*) desc LIMIT 10
+
+
+
+-- regionwise male female comparision
+select keyword, count(*)  from comments c, articleKeywords a, locationState ls , commenterGender cg where c.assetURL = a.webURL and ls.city = c.userLocation  and c.userID = cg.userID and c.username = cg.username and ls.region = 'others'  and cg.gender = 'male' and keyword not in ( select keyword from comments c, articleKeywords a, locationState ls , commenterGender cg where c.assetURL = a.webURL and ls.city = c.userLocation  and c.userID = cg.userID and c.username = cg.username and ls.region = 'others'  and cg.gender = 'female' group by a.keyword order by count(*) desc LIMIT 50) group by a.keyword order by count(*) desc LIMIT 10
+
+
+
+--To know the percentage of entities used by females
+select entity, round((count(*) * 100.0)/cast(total as float), 4) from (select sum(cc) as total from (select count(*) as cc from namedEntities where gender = 'female' group by entity having cc > 9 order by cc desc LIMIT 100)),
+ namedEntities   where gender =  'female' and entity not in (select entity from namedEntities where gender <> 'andy' group by entity order by count(*) desc LIMIT 15) group by entity  order by count(*) desc LIMIT 100;
+
+
+
+Number of comments for which we have article data:
+select count(distinct(commentID)) from comments c,articles a where c.assetURL=a.webURL -- 896841
+
+
+Same userId , different username
+select count(distinct(t1.userID)) from comments t1,comments t2 where t1.userID=t2.userID and t1.username<>t2.username -- 2649
+
+select t1.userID,t1.username,t2.username from comments t1,comments t2 where t1.userID=t2.userID and t1.username<>t2.username group by t1.userID limit 10;
+
+select count(*) from comments where username='Anonymous' -- 359
+
+
+Distinct userids
+select count(distinct(userID)) from comments --  144614
+
+Comments on articles having section labelled
+select count(*) from comments c,artic	les a, ArticleSection s where c.assetURL=a.webURL and a.id=s.id - 896619
+
+Comments Distribution over Sections:
+select s.section as 'SectionName',count(*) as 'CommentsCount' from comments c,articles a, ArticleSection s where c.assetURL=a.webURL and a.id=s.id group by s.section order by CommentsCount desc
+
+
+Creating ArticleNewsDesk Table:
+
+create table ArticleNewsDesk as
+select id,newsDesk from articles where newsDesk is not NULL
+
+
+Distinct newsDesk and thier articles Count:
+
+select distinct(newsDesk),count(*) as 'Count' from ArticleNewsDesk group by newsDesk order by Count desc
+
+
+
+Comments count on newsDesk:
+select n.newsDesk as 'NewsDesk',count(*) as 'CommentsCount' from comments c,articles a, ArticleNewsDesk n where c.assetURL=a.webURL and a.id=n.id group by n.newsDesk order by CommentsCount desc
+
+
+No Of Articles commented on by user:
+SELECT userID, COUNT(DISTINCT assetURL) as ArticlesCount from comments group by userID order by ArticlesCount desc
+
+
+how many sections different commenters show interest:
+SELECT C.userID, count(distinct section) as secCount from comments C, articles A where C.assetURL = A.webURL and section is not null group by C.userID order by secCount desc
+
+No Of Articles commented on by male user:
+select C.userID, count(distinct C.assetURL) as artCount from comments C, commenterGender CG where C.userID = CG.userID and CG.gender =   'male' group by C.userID order by artCount desc;
+
+No Of Articles commented on by female user:
+select C.userID, count(distinct C.assetURL) as artCount from comments C, commenterGender CG where C.userID = CG.userID and CG.gender =   'female' group by C.userID order by artCount desc;
+
+--male Comments
+select t1.userID, t2.userName, t1.commentBody from comments t1, commenterGender t2 where t1.userID = t2.userID and t2.gender = 'male');
+
+
+## Average number of comments per article per section
+select section,ROUND(cast(count(c.assetURL) AS FLOAT)  /count(distinct(webURL)),3)
+from
+(select section,webURL from articles group by section,webURL) as t1 LEFT OUTER JOIN
+comments c ON c.assetURL=t1.webURL where section is not NULL
+group by section
+
+
+
+Section wise sentiment count
+select section,count(*) as total,COUNT(CASE WHEN cs.gender = 'male' then 1 ELSE NULL END) as "Male_Count",
+    COUNT(CASE WHEN cs.gender = 'male' and cs.sentiment=-1 then 1 ELSE NULL END) as "Male_Negative",
+    COUNT(CASE WHEN cs.gender = 'male' and cs.sentiment=1 then 1 ELSE NULL END) as "Male_Positive",
+    COUNT(CASE WHEN cs.gender = 'male' and cs.sentiment=0 then 1 ELSE NULL END) as "Male_Neutral",
+    COUNT(CASE WHEN cs.gender = 'female' then 1 ELSE NULL END) as "Female_Count",
+    COUNT(CASE WHEN cs.gender = 'female' and cs.sentiment=-1 then 1 ELSE NULL END) as "Female_Negative",
+    COUNT(CASE WHEN cs.gender = 'female' and cs.sentiment=1 then 1 ELSE NULL END) as "Female_Positive",
+    COUNT(CASE WHEN cs.gender = 'female' and cs.sentiment=0 then 1 ELSE NULL END) as "Female_Neutral"
+     from articles a,comments c,CommentSent cs where c.commentID=cs.commentID and a.webURL=c.assetURL and section in ('U.S.','World','Sports','Business Day','Arts')  group by section
